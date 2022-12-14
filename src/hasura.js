@@ -61,11 +61,9 @@ async function addDeployVersion(params) {
     "InsertMfeService"
   );
   if (errors) {
-    // handle those errors like a pro
     console.error(errors);
   }
 
-  // do something great with this precious data
   return data;
 }
 
@@ -76,11 +74,9 @@ async function addImportmapVersion(params) {
     "InsertMfeImportmap"
   );
   if (errors) {
-    // handle those errors like a pro
     console.error(errors);
   }
 
-  // do something great with this precious data
   return data;
 }
 

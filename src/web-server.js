@@ -1,5 +1,6 @@
 //Setup
 "use strict";
+
 require("dotenv").config();
 
 const express = require("express"),
@@ -125,7 +126,7 @@ function handleGetManifest(req, res) {
     });
 }
 
-app.patch("/import-map.json", (req, res) => {
+app.patch("/import-map.json", async (req, res) => {
   const env = getEnv(req);
   try {
     req.body = JSON.parse(req.body);
@@ -196,13 +197,23 @@ app.patch("/import-map.json", (req, res) => {
       );
     }
   }
-
+  if (getConfig().beforeHook && typeof getConfig().beforeHook === "function") {
+    try {
+      await getConfig().beforeHook({
+        metaData: req.body.metaData,
+        newImports: req.body.imports,
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
   return Promise.all([validImportUrlPromises, validScopeUrlPromises])
     .then(() => {
       modify
         .modifyImportMap(env, {
           services: req.body.imports,
           scopes: req.body.scopes,
+          metaData: req.body.metaData,
         })
         .then((newImportMap) => {
           res.status(200).send(newImportMap);

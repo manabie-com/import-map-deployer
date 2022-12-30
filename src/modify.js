@@ -1,4 +1,5 @@
 "use strict";
+
 // File editing
 const lock = new (require("rwlock"))();
 const ioOperations = require("./io-operations.js");
@@ -62,14 +63,28 @@ function modifyLock(env, modifierFunc) {
           // modify json
           const deepJsonCopy = JSON.parse(JSON.stringify(json));
           json = modifierFunc(deepJsonCopy);
-
           // write json to file
-          const newImportMapString = JSON.stringify(json, null, 2);
+          const newImportMapString = JSON.stringify(json.json, null, 2);
           return ioOperations
             .writeManifest(newImportMapString, env)
-            .then(() => {
+            .then(async () => {
+              try {
+                if (json.metaData) {
+                  const imports = { ...json.newImports };
+                  const afterHook = getConfig().afterHook;
+                  if (afterHook && typeof afterHook === "function") {
+                    await afterHook({
+                      metaData: json.metaData,
+                      newImports: imports,
+                      newImportMap: JSON.parse(newImportMapString),
+                    });
+                  }
+                }
+              } catch (error) {
+                throw error;
+              }
               releaseLock();
-              return json;
+              return json.json;
             });
         })
         .catch((err) => {
@@ -83,7 +98,7 @@ function modifyLock(env, modifierFunc) {
 }
 
 exports.modifyImportMap = function (env, newValues) {
-  const { services, scopes } = newValues;
+  const { services, scopes, metaData } = newValues;
 
   const alphabetical = !!getConfig().alphabetical;
   const newImports = alphabetical
@@ -104,7 +119,11 @@ exports.modifyImportMap = function (env, newValues) {
         const scopes = getScopesFromManifest(json);
         Object.assign(scopes, newScopes);
       }
-      return json;
+      return {
+        json: json,
+        metaData: metaData,
+        newImports: newImports,
+      };
     });
   } else {
     return Promise.resolve();
@@ -146,11 +165,13 @@ exports.modifyService = function (
     const alphabetical = !!getConfig().alphabetical;
     if (alphabetical) {
       return {
-        imports: sortObjectAlphabeticallyByKeys(json.imports),
-        scopes: sortObjectAlphabeticallyByKeys(json.scopes),
+        json: {
+          imports: sortObjectAlphabeticallyByKeys(json.imports),
+          scopes: sortObjectAlphabeticallyByKeys(json.scopes),
+        },
       };
     } else {
-      return json;
+      return { json };
     }
   });
 };

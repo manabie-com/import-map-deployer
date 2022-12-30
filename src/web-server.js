@@ -1,8 +1,6 @@
 //Setup
 "use strict";
 
-const { addDeployVersion, addImportmapVersion } = require("./hasura.js");
-
 require("dotenv").config();
 
 const express = require("express"),
@@ -128,7 +126,7 @@ function handleGetManifest(req, res) {
     });
 }
 
-app.patch("/import-map.json", (req, res) => {
+app.patch("/import-map.json", async (req, res) => {
   const env = getEnv(req);
   try {
     req.body = JSON.parse(req.body);
@@ -199,44 +197,25 @@ app.patch("/import-map.json", (req, res) => {
       );
     }
   }
-
+  if (getConfig().beforeHook && typeof getConfig().beforeHook === "function") {
+    try {
+      await getConfig().beforeHook({
+        metaData: req.body.metaData,
+        newImports: req.body.imports,
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
   return Promise.all([validImportUrlPromises, validScopeUrlPromises])
     .then(() => {
       modify
         .modifyImportMap(env, {
           services: req.body.imports,
           scopes: req.body.scopes,
+          metaData: req.body.metaData,
         })
-        .then(async (newImportMap) => {
-          const imports = { ...req.body.imports };
-          const importKeys = Object.keys(imports);
-          const now = new Date().toISOString();
-          const { organization, environment, version, type, squad_name } =
-            req.body.metaData || {};
-          if (req.body.metaData) {
-            for (const key of importKeys) {
-              const params = {
-                created_at: now,
-                deployed_at: type === "deploy" ? now : undefined,
-                environment: environment,
-                link: imports[key],
-                organization: organization,
-                rollback_at: type === "rollback" ? now : undefined,
-                service_name: key,
-                squad_name: squad_name,
-                version: version,
-                type: type,
-              };
-              await addDeployVersion(params);
-            }
-            await addImportmapVersion({
-              deployed_at: now,
-              environment: environment,
-              organization: organization,
-              import_map: newImportMap,
-              type: type,
-            });
-          }
+        .then((newImportMap) => {
           res.status(200).send(newImportMap);
         })
         .catch((err) => {
